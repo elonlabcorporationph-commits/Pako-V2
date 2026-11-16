@@ -132,7 +132,7 @@ class NeonQueryBuilder {
         queryStr = `INSERT INTO "${this.table}" (${cols}) VALUES ($${paramIndex++}) ON CONFLICT DO NOTHING RETURNING *`;
       }
 
-      const result = await sql(queryStr, params);
+      const result = const result = await sql.query(queryStr, params);
 
       let data: any = result;
       if (this.singleResult || this.maybeSingleResult) {

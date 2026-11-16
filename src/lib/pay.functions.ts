@@ -9,10 +9,10 @@ export const PAY_PACKAGES = [
 const tokenSchema = z.string().regex(/^\d+\.[0-9a-f]{64}$/);
 const statusSchema = z.enum(["pending", "verified", "rejected"]);
 
-// Helper to get the Neon DB
+// Helper to get the Supabase DB & Storage client (Supabase-only)
 async function admin() {
-  const { neonAdmin } = await import("@/integrations/neon/client.server");
-  return neonAdmin;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 // Helper for staff auth
 async function staff(token: string) {
@@ -73,7 +73,6 @@ export const createPayOrder = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const db = await admin();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server"); // For Storage ONLY
     const { decodeDataUrl, MEDIA_BUCKET, ORDER_BUCKET } = await import("@/server/storage.server");
     
     const portrait = decodeDataUrl(data.photo);
@@ -87,7 +86,7 @@ export const createPayOrder = createServerFn({ method: "POST" })
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`pasko-pay:${ip}`));
     const ipHash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
     
-    // 1. Check rate limit in Neon
+    // 1. Check rate limit in Supabase
     const { data: recent } = await db
       .from("pay_orders")
       .select("created_at")
@@ -96,7 +95,7 @@ export const createPayOrder = createServerFn({ method: "POST" })
     if (isRateLimited((recent ?? []).map((r: any) => new Date(r.created_at).getTime())))
       throw new Error("Too many orders from this device. Please wait a few minutes and try again.");
       
-    // 2. Check method in Neon
+    // 2. Check method in Supabase
     const { data: method } = await db
       .from("pay_methods")
       .select("method")
@@ -118,14 +117,14 @@ export const createPayOrder = createServerFn({ method: "POST" })
     const photoPath = `pay/${code}/original.${portrait.type === "image/png" ? "png" : portrait.type === "image/webp" ? "webp" : "jpg"}`;
     
     // 3. Upload Portrait to Supabase Storage
-    const { error: photoErr } = await supabaseAdmin.storage
+    const { error: photoErr } = await db.storage
       .from(ORDER_BUCKET)
       .upload(photoPath, portrait.bytes, { contentType: portrait.type });
     if (photoErr) throw new Error("Your portrait could not be uploaded.");
     
     const contact = data.email ? `${data.contact} · ${data.email}` : data.contact;
     
-    // 4. Insert order into Neon
+    // 4. Insert order into Supabase
     const { data: order, error } = await db
       .from("pay_orders")
       .insert({
@@ -153,7 +152,7 @@ export const createPayOrder = createServerFn({ method: "POST" })
     for (const [i, d] of decoded.entries()) {
       const path = `proofs/${code}/receipt-${i + 1}.${d.ext}`;
       // 5. Upload receipts to Supabase Storage
-      const { error: upErr } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(path, d.bytes, { contentType: d.type });
+      const { error: upErr } = await db.storage.from(MEDIA_BUCKET).upload(path, d.bytes, { contentType: d.type });
       if (upErr) {
         await db.from("pay_orders").delete().eq("id", order.id);
         throw new Error("The receipt could not be uploaded.");
@@ -161,7 +160,7 @@ export const createPayOrder = createServerFn({ method: "POST" })
       paths.push(path);
     }
     
-    // 6. Update receipts in Neon
+    // 6. Update receipts in Supabase
     await db
       .from("pay_orders")
       .update({ proof_path: paths[0] ?? null, proof_paths: paths })
@@ -198,7 +197,7 @@ export const getPayOrderStatus = createServerFn({ method: "POST" })
     const { access_token, result_paths, ...order } = row;
     const owner = Boolean(data.token && access_token && data.token === access_token);
     let photos: string[] = [];
-    if (owner && result_paths.some(Boolean)) {
+    if (owner && result_paths?.some?.(Boolean)) {
       const { signPaths, ORDER_BUCKET } = await import("@/server/storage.server");
       const urls = await signPaths(ORDER_BUCKET, result_paths.filter(Boolean), 3600);
       photos = result_paths.map((p: string) => (p ? (urls[p] ?? "") : "")).filter(Boolean);
@@ -208,7 +207,6 @@ export const getPayOrderStatus = createServerFn({ method: "POST" })
 
 async function renderPayOrderById(id: string) {
   const db = await admin();
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server"); // For Storage
   
   const { data: order } = await db
     .from("pay_orders")
@@ -224,20 +222,20 @@ async function renderPayOrderById(id: string) {
     .eq("id", order.id)
     .in("render_status", ["queued", "failed"])
     .select("id");
-  if (!claim.data) return { started: false };
+  if (!claim.data || claim.data.length === 0) return { started: false };
   
   const { ORDER_BUCKET } = await import("@/server/storage.server");
   const { generateChristmasPhoto } = await import("@/server/ai.server");
   const { STYLES } = await import("@/lib/pasko-content");
   
   // Download from Supabase Storage
-  const { data: original } = await supabaseAdmin.storage.from(ORDER_BUCKET).download(order.photo_path);
+  const { data: original } = await db.storage.from(ORDER_BUCKET).download(order.photo_path);
   if (!original) {
     await db.from("pay_orders").update({ render_status: "failed" }).eq("id", order.id);
     return { started: false };
   }
   
-  const paths = Array.from({ length: 5 }, (_, i) => order.result_paths[i] || "");
+  const paths = Array.from({ length: 5 }, (_, i) => order.result_paths?.[i] || "");
   await Promise.allSettled(
     paths.map(async (existing, i) => {
       if (existing) return;
@@ -245,7 +243,7 @@ async function renderPayOrderById(id: string) {
         const png = await generateChristmasPhoto(original, i);
         const path = `pay/${order.code}/result-${i + 1}-${STYLES[i]?.key ?? i}.png`;
         // Upload result to Supabase Storage
-        const up = await supabaseAdmin.storage.from(ORDER_BUCKET).upload(path, png, { contentType: "image/png", upsert: true });
+        const up = await db.storage.from(ORDER_BUCKET).upload(path, png, { contentType: "image/png", upsert: true });
         if (!up.error) paths[i] = path;
       } catch (e) {
         console.error("pay render failed", {
@@ -258,7 +256,7 @@ async function renderPayOrderById(id: string) {
   );
   
   const done = paths.every(Boolean);
-  // Save paths to Neon
+  // Save paths to Supabase
   await db
     .from("pay_orders")
     .update({ result_paths: paths, render_status: done ? "done" : "failed" })
@@ -362,7 +360,7 @@ export const staffReviewPayOrder = createServerFn({ method: "POST" })
       .eq("status", "pending")
       .select("id");
     if (error) throw new Error("The review could not be saved.");
-    if (!rows) throw new Error("This order is no longer pending.");
+    if (!rows || rows.length === 0) throw new Error("This order is no longer pending.");
     
     await db
       .from("pay_order_events")
@@ -417,7 +415,6 @@ export const staffSavePayMethod = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const db = await staff(data.token);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server"); // For Storage
     
     const changes: { account_name: string; account_number: string; active: boolean; qr_path?: string } = {
       account_name: data.account_name,
@@ -431,13 +428,13 @@ export const staffSavePayMethod = createServerFn({ method: "POST" })
       if (!["image/jpeg", "image/png", "image/webp"].includes(type) || bytes.length > 5 * 1024 * 1024)
         throw new Error("QR must be a JPG, PNG or WEBP up to 5 MB.");
       const path = `qr/${data.method}-${Date.now()}.${type.split("/")[1]}`;
-      // Upload to Supabase
-      const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(path, bytes, { contentType: type });
+      // Upload to Supabase Storage
+      const { error } = await db.storage.from(MEDIA_BUCKET).upload(path, bytes, { contentType: type });
       if (error) throw new Error("The QR image could not be uploaded.");
       changes.qr_path = path;
     }
     
-    // Save to Neon
+    // Save to Supabase
     const { error } = await db.from("pay_methods").update(changes).eq("method", data.method);
     if (error) throw new Error("The payment method could not be saved.");
     return { ok: true };
@@ -477,7 +474,7 @@ export const staffRerenderPayOrder = createServerFn({ method: "POST" })
       .eq("status", "verified")
       .neq("render_status", "done")
       .select("id");
-    if (!rows) throw new Error("This order is not waiting for photos.");
+    if (!rows || rows.length === 0) throw new Error("This order is not waiting for photos.");
     const r = await renderPayOrderById(data.id);
     return { done: Boolean((r as { done?: boolean }).done) };
   });
