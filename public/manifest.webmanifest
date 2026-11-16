@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "Pasko Photo Magic",
+  "short_name": "Pasko Magic",
+  "description": "Turn your favorite photo into five festive Christmas portraits.",
+  "lang": "en-PH",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#043f21",
+  "background_color": "#fcfcf6",
+  "icons": [
+    { "src": "/icons/pasko-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pasko-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pasko-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

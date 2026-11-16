@@ -1,0 +1,1 @@
+ALTER TABLE public.pay_orders ADD COLUMN proof_paths text[] NOT NULL DEFAULT '{}';

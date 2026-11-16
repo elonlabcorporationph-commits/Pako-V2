@@ -1,0 +1,19 @@
+{
+  "source": "code-archive",
+  "archive": "pasko-photo-magic-backup.zip",
+  "capabilities": [
+    {"capability":"application code and public pages","source":"uploaded backup","outcome":"migrate","status":"pending","next_action":"Recreate all public routes and the photo order flow in this TanStack project."},
+    {"capability":"database schema","source":"Drizzle SQL migrations","outcome":"migrate","status":"pending","next_action":"Recreate the orders, settings, samples, roles, and payments schema in Lovable Cloud."},
+    {"capability":"application records","source":"No records export attached","outcome":"migrate","status":"pending","next_action":"Request sanitized CSV or JSON exports for application tables after the preview."},
+    {"capability":"authentication identities","source":"Backup auth code; no user export attached","outcome":"migrate","status":"pending","next_action":"Request user identity export and implement first-login email verification and password setup."},
+    {"capability":"authorization and admin roles","source":"Backup role checks and admin route","outcome":"migrate","status":"pending","next_action":"Recreate server-verified role checks, protected admin access, and database policies."},
+    {"capability":"uploaded customer and gallery files","source":"Backup storage flows and asset pointers; no user file export attached","outcome":"migrate","status":"pending","next_action":"Recreate private order storage and public sample assets; request existing customer files with records."},
+    {"capability":"AI photo generation provider","source":"Replicate integration in backup","outcome":"preserve","status":"pending","next_action":"Retain the provider flow; request its secret securely before live generation verification."},
+    {"capability":"manual payment and payment proof","source":"GCash, Maya, and bank transfer flows in backup","outcome":"migrate","status":"pending","next_action":"Recreate payment submission and admin verification; confirm live recipient details after preview."},
+    {"capability":"public order lookup and payment callbacks","source":"Order tracking and public payment flows in backup","outcome":"migrate","status":"pending","next_action":"Recreate and verify the public customer order endpoints and access checks."},
+    {"capability":"scheduled order cleanup","source":"Public cleanup route and scheduled-job auth in backup","outcome":"preserve","status":"pending","next_action":"Recreate the cleanup endpoint and retain its external schedule/caller; verify its signature."},
+    {"capability":"email, Stripe, and other provider integrations","source":"No email or Stripe implementation detected; Replicate is the only external service identified","outcome":"preserve","status":"pending","next_action":"Verify Replicate after its secret is securely configured; no other provider action identified."},
+    {"capability":"cutover","source":"Existing published Pasko Photo Magic app","outcome":"pending","status":"pending","next_action":"Keep the existing app URL until migrated routes and live services are verified."},
+    {"capability":"end-to-end verification","source":"Migrated application","outcome":"verify","status":"pending","next_action":"Test the preview, order creation/readback, payment submission, admin review, and safe provider paths."}
+  ]
+}
